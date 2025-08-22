@@ -1,10 +1,23 @@
-Absolutely, Marcos. Here's a polished and visually engaging version of your `.md` file that’s clean, readable, and developer-friendly:
-
----
-
 # 🔐 JWT Authentication with Token Refresh
 
 A minimal WebAPI project demonstrating how to generate, validate, and refresh JWT tokens using ASP.NET Core and Entity Framework.
+
+When a call is made to the endpoint POST /users with the below data in the body of JSON:
+{
+   "Username" : "James",
+   "Password" : "YourFavoritePassword"
+}
+A new user is created and stored in the database.
+The data stored are: 
+
+UserName and the HashPassword. 
+
+In this project, I am using a third-party 'NugetPackage' to encrypt the password into a hash format before storing it in the database. Another functionality of this library is to verify the password entry with the HashPassword stored in the database.
+
+When a user calls the /auth/login endpoint and submits the username and password (POST), the user is authenticated, and a JWT token is generated. The token is then sent with every subsequent call; for example, if the user wants to call the GET /weatherforecast endpoint, the token is included in the request payload.
+
+The token is then verified; if it has expired, a 405 code is returned to the client. The client will then call the endpoint POST /auth/refresh with the refresh token received with the original token. After validating this refresh token, a new token is sent back to the client, which continues with subsequent calls to the endpoint GET /weatherforecast using this new token. Every time the token expires, the process repeats.
+
 
 ---
 
