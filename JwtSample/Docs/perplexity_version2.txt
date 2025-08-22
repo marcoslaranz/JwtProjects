@@ -1,0 +1,122 @@
+Program.cs with Perplexity comments
+=====================================
+
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
+using JwtSample.Services;
+using JwtSample.EndPoints;
+using JwtSample.Models;
+using JwtSample.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi();
+
+// Example domain service
+builder.Services.AddScoped<IWeatherForecastService, WeatherForecastService>();
+
+
+/*
+ Previously, I was pulling values directly from appsettings.json like this:
+
+    var issuer = builder.Configuration["JwtConfig:Issuer"];
+    var audience = builder.Configuration["JwtConfig:Audience"];
+    var key = builder.Configuration["JwtConfig:Key"];
+
+ But now, I’ve introduced the `JwtConfig` class, which represents the "JwtConfig"
+ section of appsettings.json. Using options binding, I can bind that whole section
+ into a strongly-typed object, which makes code cleaner and safer.
+ Keeping this here just for reference.
+*/
+
+
+// Bind the "JwtConfig" section in appsettings.json to the JwtConfig class.
+// This makes configuration values available through IOptions<JwtConfig>.
+// `ValidateDataAnnotations()` will enforce any validation attributes defined in JwtConfig.
+// `ValidateOnStart()` ensures invalid configuration fails fast at startup.
+builder.Services.AddOptions<JwtConfig>()
+     .Bind(builder.Configuration.GetSection("JwtConfig"))
+     .ValidateDataAnnotations()
+     .ValidateOnStart();
+
+
+// By default, only IOptions<JwtConfig> is available for injection.
+// This registration adds JwtConfig itself as a singleton, so it can be injected directly
+// without wrapping it in IOptions<T>. This is optional — you could inject IOptions<JwtConfig>
+// directly into your services instead.
+builder.Services.AddSingleton(sp =>
+    sp.GetRequiredService<IOptions<JwtConfig>>().Value);
+
+// Register your JWT utility service, which can consume JwtConfig through DI.
+builder.Services.AddSingleton<IJwtService, JwtService>();
+
+
+
+// --- Database Setup ---
+
+// Load the connection string from appsettings.json (ConnectionStrings section).
+var connString = builder.Configuration.GetConnectionString("JwtDbConnection");
+if (string.IsNullOrEmpty(connString))
+{
+    throw new Exception("Connection string not found in appsettings.json");
+}
+builder.Services.AddSqlite<JwtSampleDbContext>(connString);
+
+
+
+// --- Authentication & JWT Bearer setup ---
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // At this point, the DI container is not yet built,
+        // so we cannot resolve IOptions<JwtConfig> here.
+        // Instead, we read configuration directly from builder.Configuration.
+        var jwtConfig = builder.Configuration.GetSection("JwtConfig").Get<JwtConfig>()
+            ?? throw new InvalidOperationException("JwtConfig section is missing or invalid.");
+
+        if (string.IsNullOrWhiteSpace(jwtConfig.Issuer) ||
+            string.IsNullOrWhiteSpace(jwtConfig.Audience) ||
+            string.IsNullOrWhiteSpace(jwtConfig.Key))
+        {
+            throw new InvalidOperationException("JWT configuration is incomplete. Please check appsettings.json.");
+        }
+
+        // Configure token validation rules
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtConfig.Issuer,
+            ValidAudience = jwtConfig.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtConfig.Key))
+        };
+    });
+
+
+
+// --- Build & Configure Middleware ---
+
+var app = builder.Build();
+
+// Expose OpenAPI docs in development
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+
+// Make sure authentication runs before authorization
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Your custom endpoint
+app.MapWeatherForecast();
+
+app.Run();

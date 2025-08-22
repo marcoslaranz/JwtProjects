@@ -1,0 +1,155 @@
+// My Program.cs with comments
+
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.Extensions.Options;
+using JwtSample.Services;
+using JwtSample.EndPoints;
+using JwtSample.Models;
+using JwtSample.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi();
+
+builder.Services.AddScoped<IWeatherForecastService, WeatherForecastService>();
+
+
+// Recover from appsettings 
+/*
+var issuer = builder.Configuration["JwtConfig:Issuer"] 
+              ?? throw new InvalidOperationException("JwtConfig:Issuer not found!");
+var audience = builder.Configuration["JwtConfig:Audience"] 
+              ?? throw new InvalidOperationException("JwtConfig:Audience not found!");
+var Key = builder.Configuration["JwtConfig:Key"]
+               ?? throw new InvalidOperationException("JwtConfig:Key not found!");
+			   
+			   
+O built an class 'JwtConfig' to recover and store during the run time
+the appsettings block 'JwtConfig', so, I don't need it anymore, but I'll keep here
+for reference.
+			   
+*/
+
+
+
+// This load all values from the appsettings.json
+// block "JwtConfig" into the class
+// JwtConfig.
+// The main gaol in these lines are
+// Allow to 'JwtConfig' clas, (now with values from appsettings.json)
+// to be injected as parameters into any service.
+// This is what 'AddOptions' does.
+
+// Comment from Perplexity: Minor wording tweak: it's not the JwtConfig class itself that gets injected — it’s available as IOptions<JwtConfig> (or IOptionsSnapshot<JwtConfig>). So technically you inject the wrapper.
+///
+builder.Services.AddOptions<JwtConfig>()
+     .Bind(builder.Configuration.GetSection("JwtConfig"))
+     .ValidateDataAnnotations()
+     .ValidateOnStart(); // optional but useful, will throw execption if something is missing.
+
+// This register the class JwtConfig and
+// enable it to be injected into contstructor
+// of the Service JwtService.
+// Comments from Perplexity:
+/*
+Mostly correct, with one nuance:
+
+By default, AddOptions<JwtConfig>() registers only IOptions<JwtConfig>, not JwtConfig itself.
+
+With your AddSingleton(...), you’re registering the JwtConfig object directly (so you can inject JwtConfig without wrapping IOptions<T>).
+
+So your comment is correct, just maybe clarify:
+*/
+
+
+
+
+
+
+builder.Services.AddSingleton(sp =>
+    sp.GetRequiredService<IOptions<JwtConfig>>().Value);
+
+//Wires up your service using the injected config
+builder.Services.AddSingleton<IJwtService, JwtService>();
+
+
+
+// Only for database 
+var connString = builder.Configuration.GetConnectionString("JwtDbConnection");
+if (string.IsNullOrEmpty(connString))
+{
+    throw new Exception("Connection string not found in appsettings.json");
+}
+
+builder.Services.AddSqlite<JwtSampleDbContext>(connString);
+
+
+
+// Configure authentication + JWT
+builder.Services.AddAuthentication("Bearer")
+    .AddJwtBearer("Bearer", options =>
+    {
+		
+		// As I need 'Jwt Configurations" settings here
+		// and I can't use the JwtConfig class as it is not 
+		// yet ready in this stage of the Program.cs, (pipeline)
+		// I need get the appsettings this way:
+		
+		// Comments from Perplexity:
+		//
+		//“At this point, the DI container isn’t built yet, so I can’t resolve JwtConfig from services. That’s why I fetch it directly from builder.Configuration instead.”
+		
+		var jwtConfig = builder.Configuration.GetSection("JwtConfig").Get<JwtConfig>()
+			?? throw new InvalidOperationException("JwtConfig section is missing or invalid.");
+			
+		if (string.IsNullOrWhiteSpace(jwtConfig.Issuer) ||
+			string.IsNullOrWhiteSpace(jwtConfig.Audience) ||
+			string.IsNullOrWhiteSpace(jwtConfig.Key))
+		{
+			throw new InvalidOperationException("JWT configuration is incomplete. Please check appsettings.json.");
+		}
+		
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtConfig.Issuer,
+            ValidAudience = jwtConfig.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtConfig.Key))
+        };
+    });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapWeatherForecast();
+
+app.Run();

@@ -1,0 +1,78 @@
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
+using JwtSample.Services;
+using JwtSample.EndPoints;
+using JwtSample.Models;
+using JwtSample.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi();
+
+// Example services
+builder.Services.AddScoped<IWeatherForecastService, WeatherForecastService>();
+builder.Services.AddSingleton<IJwtService, JwtService>();
+
+// Bind JwtConfig from appsettings.json
+builder.Services.AddOptions<JwtConfig>()
+    .Bind(builder.Configuration.GetSection("JwtConfig"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+// Convenience: register JwtConfig itself (optional, you could just use IOptions<JwtConfig>)
+builder.Services.AddSingleton(sp =>
+    sp.GetRequiredService<IOptions<JwtConfig>>().Value);
+
+// Database registration
+var connString = builder.Configuration.GetConnectionString("JwtDbConnection");
+if (string.IsNullOrEmpty(connString))
+{
+    throw new Exception("Connection string not found in appsettings.json");
+}
+builder.Services.AddSqlite<JwtSampleDbContext>(connString);
+
+// --- Authentication & JWT ---
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer((options, sp) =>
+    {
+        // Resolve JwtConfig via DI here 🎉
+        var jwtConfig = sp.GetRequiredService<IOptions<JwtConfig>>().Value;
+
+        if (string.IsNullOrWhiteSpace(jwtConfig.Issuer) ||
+            string.IsNullOrWhiteSpace(jwtConfig.Audience) ||
+            string.IsNullOrWhiteSpace(jwtConfig.Key))
+        {
+            throw new InvalidOperationException("JWT configuration is incomplete. Please check appsettings.json.");
+        }
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtConfig.Issuer,
+            ValidAudience = jwtConfig.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtConfig.Key))
+        };
+    });
+
+var app = builder.Build();
+
+// Swagger / OpenAPI only in dev
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapWeatherForecast();
+
+app.Run();
