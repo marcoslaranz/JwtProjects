@@ -55,28 +55,6 @@ public class JwtService: IJwtService
 	
 	return await GenerateJwtToken(user);
   }	
-	
-/*	
-  public string GenerateToken(string username)
-  {
-  	var claim = new[]
-  	{
-  		new Claim(JwtRegisteredClaimNames.Sub, username),
-  		new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-  	};
-	
-  	var key= new SymmetricSecurityKey(Encoding.UTF8.GetBytes(getKey()));
-  	var cred = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-  	var token = new JwtSecurityToken(
-  		   issuer: getIssuer(),
-  		   audience: getAudience(),
-  		   claims: claim,
-  		   expires: DateTime.Now.AddHours(1),
-  		   signingCredentials: cred);
-	
-  	return new JwtSecurityTokenHandler().WriteToken(token);
-  }
-  */
   
   public async Task<LoginResponseModel?> GenerateJwtToken(User user)
   {
@@ -116,7 +94,6 @@ public class JwtService: IJwtService
 	};
   }
 	
-	
   private async Task<string> GenerateRefreshToken(int userId)
   {
 	_logger.LogInformation($"GenerateRefreshToken: userId: {userId}");
@@ -132,7 +109,6 @@ public class JwtService: IJwtService
   	
   	return refreshToken.Token;
   }
-	
 	
   public async Task<LoginResponseModel?> ValidateRefreshToken(string token)
   {
@@ -158,8 +134,6 @@ public class JwtService: IJwtService
 				DateTime.UtcNow,
 				refreshToken.Expiry < DateTime.UtcNow
 			);
-	
-	
   	
   	await _refreshTokenRepository.Delete(refreshToken);
   	
