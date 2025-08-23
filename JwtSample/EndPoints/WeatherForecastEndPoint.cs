@@ -11,7 +11,8 @@ public static class WeatherForecastEndPoint
 		{
 			return service.GetWeatherForecast();
 		})
-		.RequireAuthorization(); // This ensures authentication is required
+		.RequireAuthorization();
+		// This ensures authentication is required
 		// .RequireAuthorization(new AuthorizeAttribute { Roles = "Admin" });
 		// This will work with the Token, see GenerateJwtToken in JwtService.
 		// Or if you define in your Program.cs an specific Autorization like
@@ -24,7 +25,7 @@ public static class WeatherForecastEndPoint
 		// Then you coud use this at end of your endpoint:
 		// .RequireAuthorization("AdminOnly");
 
-		
+
 		return app;
 	}
 }
